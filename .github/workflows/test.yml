@@ -10,7 +10,7 @@ on:
 jobs:
   vz:
     name: "vz"
-    runs-on: macos-13-xl
+    runs-on: macos-13
     timeout-minutes: 120
     steps:
       - uses: actions/setup-go@v4
