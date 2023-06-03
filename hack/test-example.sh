@@ -60,6 +60,12 @@ case "$NAME" in
 	CHECKS["snapshot-online"]=""
 	CHECKS["user-v2"]=1
 	;;
+"vz")
+	CHECKS["systemd-strict"]=
+	CHECKS["port-forwards"]=""
+	CHECKS["snapshot-online"]=""
+	CHECKS["snapshot-offline"]=""
+	;;
 esac
 
 if limactl ls -q | grep -q "$NAME"; then
