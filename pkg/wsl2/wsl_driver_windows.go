@@ -38,6 +38,7 @@ func (l *LimaWslDriver) Validate() error {
 		"Disk",
 		"Mounts",
 		"MountType",
+		"MountInotify",
 		"SSH",
 		"Provision",
 		"Containerd",

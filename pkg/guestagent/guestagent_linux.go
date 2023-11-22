@@ -3,6 +3,7 @@ package guestagent
 import (
 	"context"
 	"errors"
+	"os"
 	"reflect"
 	"sync"
 	"syscall"
@@ -331,5 +332,15 @@ func (a *agent) fixSystemTimeSkew() {
 			}
 		}
 		ticker.Stop()
+	}
+}
+
+func (a *agent) HandleInotify(event api.InotifyEvent) {
+	location := event.Location
+	if _, err := os.Stat(location); err == nil {
+		err := os.Chtimes(location, event.Time.Local(), event.Time.Local())
+		if err != nil {
+			logrus.Errorf("error in inotify handle. Event: %s, Error: %s", event, err)
+		}
 	}
 }

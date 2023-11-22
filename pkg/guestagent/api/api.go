@@ -32,3 +32,8 @@ type Event struct {
 	LocalPortsRemoved []IPPort `json:"localPortsRemoved,omitempty"`
 	Errors            []string `json:"errors,omitempty"`
 }
+
+type InotifyEvent struct {
+	Location string    `json:"location,omitempty"`
+	Time     time.Time `json:"time,omitempty"`
+}
