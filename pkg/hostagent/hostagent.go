@@ -604,6 +604,29 @@ func (a *HostAgent) createClient(_ context.Context) (guestagentclient.GuestAgent
 	return guestagentclient.NewGuestAgentClient(a.driver.GuestAgentConn)
 }
 
+func (a *HostAgent) getDriverConnOrFallback(ctx context.Context) (net.Conn, error) {
+	conn, err := a.driver.GuestAgentConn(ctx)
+	if err != nil {
+		retry := 0
+		for retry < 2 {
+			var d net.Dialer
+			conn, err = d.DialContext(ctx, "unix", filepath.Join(a.instDir, filenames.GuestAgentSock))
+			if err != nil {
+				//Forward ssh sock and create connection
+				localUnix := filepath.Join(a.instDir, filenames.GuestAgentSock)
+				remoteUnix := "/run/lima-guestagent.sock"
+				if err := forwardSSH(context.Background(), a.sshConfig, a.sshLocalPort, localUnix, remoteUnix, verbCancel, false); err != nil {
+					return nil, err
+				}
+				retry = retry + 1
+			}
+			return conn, err
+		}
+		return nil, errors.New("unable to create guestagent fallback connection")
+	}
+	return conn, nil
+}
+
 func (a *HostAgent) processGuestAgentEvents(ctx context.Context, client guestagentclient.GuestAgentClient) error {
 	info, err := client.Info(ctx)
 	if err != nil {

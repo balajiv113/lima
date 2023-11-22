@@ -32,6 +32,8 @@ var (
 	vSockPort = 0
 
 	virtioPort = "/dev/virtio-ports/" + filenames.VirtioPort
+
+	socket = "/run/lima-guestagent.sock"
 )
 
 func daemonAction(cmd *cobra.Command, _ []string) error {
@@ -88,6 +90,16 @@ func daemonAction(cmd *cobra.Command, _ []string) error {
 		}
 		l = vsockL
 		logrus.Infof("serving the guest agent on vsock port: %d", vSockPort)
+	} else {
+		socketL, err := net.Listen("unix", socket)
+		if err != nil {
+			return err
+		}
+		if err := os.Chmod(socket, 0o777); err != nil {
+			return err
+		}
+		l = socketL
+		logrus.Infof("serving the guest agent on %q", socket)
 	}
 	return srv.Serve(l)
 }
