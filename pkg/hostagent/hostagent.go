@@ -555,6 +555,16 @@ func (a *HostAgent) watchGuestAgentEvents(ctx context.Context) {
 		}
 		return errors.Join(errs...)
 	})
+
+	go func() {
+		if a.y.MountInotify != nil && *a.y.MountInotify {
+			err := a.startInotify(ctx)
+			if err != nil {
+				logrus.WithError(err).Warn("failed to start inotify", err)
+			}
+		}
+	}()
+
 	for {
 		client, err := a.getOrCreateClient(ctx)
 		if err == nil {
@@ -590,13 +600,8 @@ func (a *HostAgent) getOrCreateClient(ctx context.Context) (guestagentclient.Gue
 	return a.client, err
 }
 
-func (a *HostAgent) createClient(ctx context.Context) (guestagentclient.GuestAgentClient, error) {
-	conn, err := a.driver.GuestAgentConn(ctx)
-	if err != nil {
-		return nil, err
-	}
-
-	return guestagentclient.NewGuestAgentClient(conn)
+func (a *HostAgent) createClient(_ context.Context) (guestagentclient.GuestAgentClient, error) {
+	return guestagentclient.NewGuestAgentClient(a.driver.GuestAgentConn)
 }
 
 func (a *HostAgent) processGuestAgentEvents(ctx context.Context, client guestagentclient.GuestAgentClient) error {

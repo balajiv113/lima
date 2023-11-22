@@ -76,8 +76,28 @@ func (b *Backend) GetEvents(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+// PostInotify is the handler for POST /v{N}/inotify.
+func (b *Backend) PostInotify(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	_, cancel := context.WithCancel(ctx)
+	defer cancel()
+
+	inotifyEvent := api.InotifyEvent{}
+	decoder := json.NewDecoder(r.Body)
+	if err := decoder.Decode(&inotifyEvent); err != nil {
+		logrus.Warn(err)
+		return
+	}
+	go b.Agent.HandleInotify(inotifyEvent)
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	_, _ = w.Write([]byte(""))
+}
+
 func AddRoutes(r *mux.Router, b *Backend) {
 	v1 := r.PathPrefix("/v1").Subrouter()
 	v1.Path("/info").Methods("GET").HandlerFunc(b.GetInfo)
 	v1.Path("/events").Methods("GET").HandlerFunc(b.GetEvents)
+	v1.Path("/inotify").Methods("POST").HandlerFunc(b.PostInotify)
 }

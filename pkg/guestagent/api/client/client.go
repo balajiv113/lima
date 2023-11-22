@@ -4,6 +4,7 @@ package client
 // Apache License 2.0
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -18,12 +19,13 @@ type GuestAgentClient interface {
 	HTTPClient() *http.Client
 	Info(context.Context) (*api.Info, error)
 	Events(context.Context, func(api.Event)) error
+	Inotify(context.Context, api.InotifyEvent) error
 }
 
 // NewGuestAgentClient creates a client.
 // remote is a path to the UNIX socket, without unix:// prefix or a remote hostname/IP address.
-func NewGuestAgentClient(conn net.Conn) (GuestAgentClient, error) {
-	hc, err := httpclientutil.NewHTTPClientWithConn(conn)
+func NewGuestAgentClient(dialFn func(ctx context.Context) (net.Conn, error)) (GuestAgentClient, error) {
+	hc, err := httpclientutil.NewHTTPClientWithDialFn(dialFn)
 	if err != nil {
 		return nil, err
 	}
@@ -80,4 +82,21 @@ func (c *client) Events(ctx context.Context, onEvent func(api.Event)) error {
 		}
 		onEvent(ev)
 	}
+}
+
+func (c *client) Inotify(ctx context.Context, event api.InotifyEvent) error {
+	buffer := &bytes.Buffer{}
+	encoder := json.NewEncoder(buffer)
+	err := encoder.Encode(&event)
+	if err != nil {
+		return err
+	}
+
+	u := fmt.Sprintf("http://%s/%s/inotify", c.dummyHost, c.version)
+	resp, err := httpclientutil.Post(ctx, c.HTTPClient(), u, buffer)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	return nil
 }

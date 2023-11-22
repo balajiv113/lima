@@ -54,6 +54,7 @@ func (l *LimaVzDriver) Validate() error {
 		"Disk",
 		"Mounts",
 		"MountType",
+		"MountInotify",
 		"SSH",
 		"Firmware",
 		"Provision",
