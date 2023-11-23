@@ -1,0 +1,38 @@
+syntax = "proto3";
+option go_package = "github.com/lima-vm/lima/pkg/limagrpc";
+
+import "google/protobuf/empty.proto";
+import "google/protobuf/timestamp.proto";
+
+service GuestService {
+  rpc Info(google.protobuf.Empty) returns (InfoResponse);
+  rpc Events(google.protobuf.Empty) returns (stream EventResponse);
+  rpc Inotify(stream InotifyResponse) returns (google.protobuf.Empty);
+}
+
+message InfoResponse {
+  repeated Port LocalPorts = 1;
+}
+
+message InotifyResponse {
+  google.protobuf.Timestamp Time = 1;
+  string Location = 2;
+}
+
+message EventResponse {
+  google.protobuf.Timestamp Time = 1;
+  repeated Port LocalPortsAdded = 2;
+  repeated Port LocalPortsRemoved = 3;
+  repeated string Errors = 4;
+}
+
+message Port {
+  string IP = 1;
+  int32 Port = 2;
+}
+
+message SearchRequest {
+  string query = 1;
+  int32 page_number = 2;
+  int32 results_per_page = 3;
+}

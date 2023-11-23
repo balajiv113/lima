@@ -3,6 +3,7 @@ package hostagent
 import (
 	"context"
 	"fmt"
+	"github.com/lima-vm/lima/pkg/limagrpc"
 	"net"
 	"os"
 	"path/filepath"
@@ -10,7 +11,6 @@ import (
 	"strings"
 
 	"github.com/lima-vm/lima/pkg/bicopy"
-	"github.com/lima-vm/lima/pkg/guestagent/api"
 	"github.com/lima-vm/sshocker/pkg/ssh"
 	"github.com/sirupsen/logrus"
 )
@@ -30,7 +30,7 @@ func forwardTCP(ctx context.Context, sshConfig *ssh.SSHConfig, port int, local, 
 		return err
 	}
 
-	if !localIP.Equal(api.IPv4loopback1) || localPort >= 1024 {
+	if !localIP.Equal(limagrpc.IPv4loopback1) || localPort >= 1024 {
 		return forwardSSH(ctx, sshConfig, port, local, remote, verb, false)
 	}
 

@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/lima-vm/lima/pkg/limagrpc"
 	"io"
 	"net"
 	"os"
@@ -21,8 +22,6 @@ import (
 	"github.com/lima-vm/lima/pkg/networks"
 
 	"github.com/lima-vm/lima/pkg/cidata"
-	guestagentapi "github.com/lima-vm/lima/pkg/guestagent/api"
-	guestagentclient "github.com/lima-vm/lima/pkg/guestagent/api/client"
 	hostagentapi "github.com/lima-vm/lima/pkg/hostagent/api"
 	"github.com/lima-vm/lima/pkg/hostagent/dns"
 	"github.com/lima-vm/lima/pkg/hostagent/events"
@@ -56,7 +55,7 @@ type HostAgent struct {
 	vSockPort int
 
 	clientMu sync.RWMutex
-	client   guestagentclient.GuestAgentClient
+	client   *GuestAgentClient
 }
 
 type options struct {
@@ -148,7 +147,7 @@ func New(instName string, stdout io.Writer, sigintCh chan os.Signal, opts ...Opt
 	}
 	rules = append(rules, y.PortForwards...)
 	// Default forwards for all non-privileged ports from "127.0.0.1" and "::1"
-	rule := limayaml.PortForward{GuestIP: guestagentapi.IPv4loopback1}
+	rule := limayaml.PortForward{GuestIP: limagrpc.IPv4loopback1}
 	limayaml.FillPortForwardDefaults(&rule, inst.Dir)
 	rules = append(rules, rule)
 
@@ -535,7 +534,7 @@ func (a *HostAgent) watchGuestAgentEvents(ctx context.Context) {
 		logrus.Debugf("Forwarding unix sockets")
 		for _, rule := range a.y.PortForwards {
 			if rule.GuestSocket != "" {
-				local := hostAddress(rule, guestagentapi.IPPort{})
+				local := hostAddress(rule, &limagrpc.Port{})
 				_ = forwardSSH(ctx, a.sshConfig, a.sshLocalPort, local, rule.GuestSocket, verbForward, rule.Reverse)
 			}
 		}
@@ -546,7 +545,7 @@ func (a *HostAgent) watchGuestAgentEvents(ctx context.Context) {
 		var errs []error
 		for _, rule := range a.y.PortForwards {
 			if rule.GuestSocket != "" {
-				local := hostAddress(rule, guestagentapi.IPPort{})
+				local := hostAddress(rule, &limagrpc.Port{})
 				// using ctx.Background() because ctx has already been cancelled
 				if err := forwardSSH(context.Background(), a.sshConfig, a.sshLocalPort, local, rule.GuestSocket, verbCancel, rule.Reverse); err != nil {
 					errs = append(errs, err)
@@ -574,7 +573,9 @@ func (a *HostAgent) watchGuestAgentEvents(ctx context.Context) {
 				}
 			}
 		} else {
-			logrus.WithError(err).Warn("connection to the guest agent was closed unexpectedly", err)
+			if !errors.Is(err, context.Canceled) {
+				logrus.WithError(err).Warn("connection to the guest agent was closed unexpectedly", err)
+			}
 		}
 		select {
 		case <-ctx.Done():
@@ -584,12 +585,12 @@ func (a *HostAgent) watchGuestAgentEvents(ctx context.Context) {
 	}
 }
 
-func isGuestAgentSocketAccessible(ctx context.Context, client guestagentclient.GuestAgentClient) bool {
+func isGuestAgentSocketAccessible(ctx context.Context, client *GuestAgentClient) bool {
 	_, err := client.Info(ctx)
 	return err == nil
 }
 
-func (a *HostAgent) getOrCreateClient(ctx context.Context) (guestagentclient.GuestAgentClient, error) {
+func (a *HostAgent) getOrCreateClient(ctx context.Context) (*GuestAgentClient, error) {
 	a.clientMu.Lock()
 	defer a.clientMu.Unlock()
 	if a.client != nil && isGuestAgentSocketAccessible(ctx, a.client) {
@@ -600,11 +601,11 @@ func (a *HostAgent) getOrCreateClient(ctx context.Context) (guestagentclient.Gue
 	return a.client, err
 }
 
-func (a *HostAgent) createClient(_ context.Context) (guestagentclient.GuestAgentClient, error) {
-	return guestagentclient.NewGuestAgentClient(a.driver.GuestAgentConn)
+func (a *HostAgent) createClient(_ context.Context) (*GuestAgentClient, error) {
+	return NewGuestAgentClient(a.driver.GuestAgentConn)
 }
 
-func (a *HostAgent) processGuestAgentEvents(ctx context.Context, client guestagentclient.GuestAgentClient) error {
+func (a *HostAgent) processGuestAgentEvents(ctx context.Context, client *GuestAgentClient) error {
 	info, err := client.Info(ctx)
 	if err != nil {
 		return err
@@ -612,7 +613,7 @@ func (a *HostAgent) processGuestAgentEvents(ctx context.Context, client guestage
 
 	logrus.Debugf("guest agent info: %+v", info)
 
-	onEvent := func(ev guestagentapi.Event) {
+	onEvent := func(ev *limagrpc.EventResponse) {
 		logrus.Debugf("guest agent event: %+v", ev)
 		for _, f := range ev.Errors {
 			logrus.Warnf("received error from the guest: %q", f)
@@ -623,6 +624,7 @@ func (a *HostAgent) processGuestAgentEvents(ctx context.Context, client guestage
 	if err := client.Events(ctx, onEvent); err != nil {
 		return err
 	}
+	logrus.Info("closed")
 	return io.EOF
 }
 

@@ -2,13 +2,11 @@ package guestagent
 
 import (
 	"context"
-
-	"github.com/lima-vm/lima/pkg/guestagent/api"
+	"github.com/lima-vm/lima/pkg/limagrpc"
 )
 
 type Agent interface {
-	Info(ctx context.Context) (*api.Info, error)
-	Events(ctx context.Context, ch chan api.Event)
-	LocalPorts(ctx context.Context) ([]api.IPPort, error)
-	HandleInotify(event api.InotifyEvent)
+	Info(ctx context.Context) (*limagrpc.InfoResponse, error)
+	Events(ctx context.Context, ch chan *limagrpc.EventResponse)
+	HandleInotify(event *limagrpc.InotifyResponse)
 }

@@ -2,10 +2,11 @@ package hostagent
 
 import (
 	"context"
+	"github.com/lima-vm/lima/pkg/limagrpc"
+	"google.golang.org/protobuf/types/known/timestamppb"
 	"os"
 	"path"
 
-	guestagentapi "github.com/lima-vm/lima/pkg/guestagent/api"
 	"github.com/lima-vm/lima/pkg/localpathutil"
 	"github.com/rjeczalik/notify"
 	"github.com/sirupsen/logrus"
@@ -22,15 +23,21 @@ func (a *HostAgent) startInotify(ctx context.Context) error {
 		return err
 	}
 
+	client, err := a.getOrCreateClient(ctx)
+	if err != nil {
+		logrus.Error("failed to create client for inotify", err)
+	}
+	inotifyCh := make(chan *limagrpc.InotifyResponse)
+	err = client.Inotify(ctx, inotifyCh)
+	if err != nil {
+		logrus.Error("inotify call failed", err)
+	}
+
 	for {
 		select {
 		case <-ctx.Done():
 			return nil
 		case watchEvent := <-mountWatchCh:
-			client, err := a.getOrCreateClient(ctx)
-			if err != nil {
-				logrus.Error("failed to create client for inotify", err)
-			}
 			stat, err := os.Stat(watchEvent.Path())
 			if err != nil {
 				continue
@@ -40,12 +47,8 @@ func (a *HostAgent) startInotify(ctx context.Context) error {
 				continue
 			}
 
-			event := guestagentapi.InotifyEvent{Location: watchEvent.Path(), Time: stat.ModTime().UTC()}
-			err = client.Inotify(ctx, event)
-
-			if err != nil {
-				logrus.WithError(err).Warn("failed to send inotify", err)
-			}
+			event := &limagrpc.InotifyResponse{Location: watchEvent.Path(), Time: timestamppb.New(stat.ModTime().UTC())}
+			inotifyCh <- event
 		}
 	}
 }

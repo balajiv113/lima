@@ -6,14 +6,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"net"
-	"os"
-	"path/filepath"
-	"runtime"
-	"strconv"
-	"sync"
-	"syscall"
-
 	"github.com/Code-Hex/vz/v3"
 	"github.com/docker/go-units"
 	"github.com/lima-vm/go-qcow2reader"
@@ -28,6 +20,13 @@ import (
 	"github.com/lima-vm/lima/pkg/store"
 	"github.com/lima-vm/lima/pkg/store/filenames"
 	"github.com/sirupsen/logrus"
+	"net"
+	"os"
+	"path/filepath"
+	"runtime"
+	"strconv"
+	"sync"
+	"syscall"
 )
 
 type virtualMachineWrapper struct {

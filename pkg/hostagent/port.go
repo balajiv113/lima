@@ -2,9 +2,9 @@ package hostagent
 
 import (
 	"context"
+	"github.com/lima-vm/lima/pkg/limagrpc"
 	"net"
 
-	"github.com/lima-vm/lima/pkg/guestagent/api"
 	"github.com/lima-vm/lima/pkg/limayaml"
 	"github.com/lima-vm/sshocker/pkg/ssh"
 	"github.com/sirupsen/logrus"
@@ -28,40 +28,41 @@ func newPortForwarder(sshConfig *ssh.SSHConfig, sshHostPort int, rules []limayam
 	}
 }
 
-func hostAddress(rule limayaml.PortForward, guest api.IPPort) string {
+func hostAddress(rule limayaml.PortForward, guest *limagrpc.Port) string {
 	if rule.HostSocket != "" {
 		return rule.HostSocket
 	}
-	host := api.IPPort{IP: rule.HostIP}
+	host := &limagrpc.Port{IP: rule.HostIP.String()}
 	if guest.Port == 0 {
 		// guest is a socket
-		host.Port = rule.HostPort
+		host.Port = int32(rule.HostPort)
 	} else {
-		host.Port = guest.Port + rule.HostPortRange[0] - rule.GuestPortRange[0]
+		host.Port = guest.Port + int32(rule.HostPortRange[0]-rule.GuestPortRange[0])
 	}
-	return host.String()
+	return host.HostString()
 }
 
-func (pf *portForwarder) forwardingAddresses(guest api.IPPort, localUnixIP net.IP) (string, string) {
+func (pf *portForwarder) forwardingAddresses(guest *limagrpc.Port, localUnixIP net.IP) (string, string) {
+	guestIp := net.ParseIP(guest.IP)
 	if pf.vmType == limayaml.WSL2 {
-		guest.IP = localUnixIP
-		host := api.IPPort{
-			IP:   net.ParseIP("127.0.0.1"),
+		guestIp = localUnixIP
+		host := &limagrpc.Port{
+			IP:   net.ParseIP("127.0.0.1").String(),
 			Port: guest.Port,
 		}
-		return host.String(), guest.String()
+		return host.String(), guest.HostString()
 	}
 	for _, rule := range pf.rules {
 		if rule.GuestSocket != "" {
 			continue
 		}
-		if guest.Port < rule.GuestPortRange[0] || guest.Port > rule.GuestPortRange[1] {
+		if guest.Port < int32(rule.GuestPortRange[0]) || guest.Port > int32(rule.GuestPortRange[1]) {
 			continue
 		}
 		switch {
-		case guest.IP.IsUnspecified():
-		case guest.IP.Equal(rule.GuestIP):
-		case guest.IP.Equal(net.IPv6loopback) && rule.GuestIP.Equal(api.IPv4loopback1):
+		case guestIp.IsUnspecified():
+		case guestIp.Equal(rule.GuestIP):
+		case guestIp.Equal(net.IPv6loopback) && rule.GuestIP.Equal(limagrpc.IPv4loopback1):
 		case rule.GuestIP.IsUnspecified() && !rule.GuestIPMustBeZero:
 			// When GuestIPMustBeZero is true, then 0.0.0.0 must be an exact match, which is already
 			// handled above by the guest.IP.IsUnspecified() condition.
@@ -69,17 +70,17 @@ func (pf *portForwarder) forwardingAddresses(guest api.IPPort, localUnixIP net.I
 			continue
 		}
 		if rule.Ignore {
-			if guest.IP.IsUnspecified() && !rule.GuestIP.IsUnspecified() {
+			if guestIp.IsUnspecified() && !rule.GuestIP.IsUnspecified() {
 				continue
 			}
 			break
 		}
-		return hostAddress(rule, guest), guest.String()
+		return hostAddress(rule, guest), guest.HostString()
 	}
-	return "", guest.String()
+	return "", guest.HostString()
 }
 
-func (pf *portForwarder) OnEvent(ctx context.Context, ev api.Event, instSSHAddress string) {
+func (pf *portForwarder) OnEvent(ctx context.Context, ev *limagrpc.EventResponse, instSSHAddress string) {
 	localUnixIP := net.ParseIP(instSSHAddress)
 
 	for _, f := range ev.LocalPortsRemoved {

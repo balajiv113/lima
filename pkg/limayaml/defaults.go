@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"crypto/sha256"
 	"fmt"
+	"github.com/lima-vm/lima/pkg/limagrpc"
 	"net"
 	"os"
 	"path/filepath"
@@ -16,7 +17,6 @@ import (
 	"github.com/lima-vm/lima/pkg/ptr"
 	"github.com/pbnjay/memory"
 
-	"github.com/lima-vm/lima/pkg/guestagent/api"
 	"github.com/lima-vm/lima/pkg/osutil"
 	"github.com/lima-vm/lima/pkg/store/dirnames"
 	"github.com/lima-vm/lima/pkg/store/filenames"
@@ -750,11 +750,11 @@ func FillPortForwardDefaults(rule *PortForward, instDir string) {
 		if rule.GuestIPMustBeZero {
 			rule.GuestIP = net.IPv4zero
 		} else {
-			rule.GuestIP = api.IPv4loopback1
+			rule.GuestIP = limagrpc.IPv4loopback1
 		}
 	}
 	if rule.HostIP == nil {
-		rule.HostIP = api.IPv4loopback1
+		rule.HostIP = limagrpc.IPv4loopback1
 	}
 	if rule.GuestPortRange[0] == 0 && rule.GuestPortRange[1] == 0 {
 		if rule.GuestPort == 0 {

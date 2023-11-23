@@ -3,6 +3,8 @@ package guestagent
 import (
 	"context"
 	"errors"
+	"github.com/lima-vm/lima/pkg/limagrpc"
+	"google.golang.org/protobuf/types/known/timestamppb"
 	"os"
 	"reflect"
 	"sync"
@@ -11,7 +13,6 @@ import (
 
 	"github.com/elastic/go-libaudit/v2"
 	"github.com/elastic/go-libaudit/v2/auparse"
-	"github.com/lima-vm/lima/pkg/guestagent/api"
 	"github.com/lima-vm/lima/pkg/guestagent/iptables"
 	"github.com/lima-vm/lima/pkg/guestagent/kubernetesservice"
 	"github.com/lima-vm/lima/pkg/guestagent/procnettcp"
@@ -134,11 +135,11 @@ func (a *agent) setWorthCheckingIPTablesRoutine(auditClient *libaudit.AuditClien
 }
 
 type eventState struct {
-	ports []api.IPPort
+	ports []*limagrpc.Port
 }
 
-func comparePorts(old, neww []api.IPPort) (added, removed []api.IPPort) {
-	mRaw := make(map[string]api.IPPort, len(old))
+func comparePorts(old, neww []*limagrpc.Port) (added, removed []*limagrpc.Port) {
+	mRaw := make(map[string]*limagrpc.Port, len(old))
 	mStillExist := make(map[string]bool, len(old))
 
 	for _, f := range old {
@@ -164,38 +165,37 @@ func comparePorts(old, neww []api.IPPort) (added, removed []api.IPPort) {
 	return
 }
 
-func (a *agent) collectEvent(ctx context.Context, st eventState) (api.Event, eventState) {
+func (a *agent) collectEvent(ctx context.Context, st eventState) (*limagrpc.EventResponse, eventState) {
 	var (
-		ev  api.Event
+		ev  = &limagrpc.EventResponse{}
 		err error
 	)
 	newSt := st
 	newSt.ports, err = a.LocalPorts(ctx)
 	if err != nil {
 		ev.Errors = append(ev.Errors, err.Error())
-		ev.Time = time.Now()
+		ev.Time = timestamppb.New(time.Now())
 		return ev, newSt
 	}
 	ev.LocalPortsAdded, ev.LocalPortsRemoved = comparePorts(st.ports, newSt.ports)
-	ev.Time = time.Now()
+	ev.Time = timestamppb.New(time.Now())
 	return ev, newSt
 }
 
-func isEventEmpty(ev api.Event) bool {
-	var empty api.Event
-	// ignore ev.Time
+func isEventEmpty(ev *limagrpc.EventResponse) bool {
+	empty := &limagrpc.EventResponse{}
 	copied := ev
-	copied.Time = time.Time{}
+	copied.Time = nil
 	return reflect.DeepEqual(empty, copied)
 }
 
-func (a *agent) Events(ctx context.Context, ch chan api.Event) {
+func (a *agent) Events(ctx context.Context, ch chan *limagrpc.EventResponse) {
 	defer close(ch)
 	tickerCh, tickerClose := a.newTicker()
 	defer tickerClose()
 	var st eventState
 	for {
-		var ev api.Event
+		var ev *limagrpc.EventResponse
 		ev, st = a.collectEvent(ctx, st)
 		if !isEventEmpty(ev) {
 			ch <- ev
@@ -212,11 +212,11 @@ func (a *agent) Events(ctx context.Context, ch chan api.Event) {
 	}
 }
 
-func (a *agent) LocalPorts(_ context.Context) ([]api.IPPort, error) {
+func (a *agent) LocalPorts(_ context.Context) ([]*limagrpc.Port, error) {
 	if cpu.IsBigEndian {
 		return nil, errors.New("big endian architecture is unsupported, because I don't know how /proc/net/tcp looks like on big endian hosts")
 	}
-	var res []api.IPPort
+	var res []*limagrpc.Port
 	tcpParsed, err := procnettcp.ParseFiles()
 	if err != nil {
 		return res, err
@@ -230,9 +230,9 @@ func (a *agent) LocalPorts(_ context.Context) ([]api.IPPort, error) {
 		}
 		if f.State == procnettcp.TCPListen {
 			res = append(res,
-				api.IPPort{
-					IP:   f.IP,
-					Port: int(f.Port),
+				&limagrpc.Port{
+					IP:   f.IP.String(),
+					Port: int32(f.Port),
 				})
 		}
 	}
@@ -261,15 +261,15 @@ func (a *agent) LocalPorts(_ context.Context) ([]api.IPPort, error) {
 		// Make sure the port isn't already listed from procnettcp
 		found := false
 		for _, re := range res {
-			if re.Port == ipt.Port {
+			if re.Port == int32(ipt.Port) {
 				found = true
 			}
 		}
 		if !found {
 			res = append(res,
-				api.IPPort{
-					IP:   ipt.IP,
-					Port: ipt.Port,
+				&limagrpc.Port{
+					IP:   ipt.IP.String(),
+					Port: int32(ipt.Port),
 				})
 		}
 	}
@@ -278,16 +278,16 @@ func (a *agent) LocalPorts(_ context.Context) ([]api.IPPort, error) {
 	for _, entry := range kubernetesEntries {
 		found := false
 		for _, re := range res {
-			if re.Port == int(entry.Port) {
+			if re.Port == int32(entry.Port) {
 				found = true
 			}
 		}
 
 		if !found {
 			res = append(res,
-				api.IPPort{
-					IP:   entry.IP,
-					Port: int(entry.Port),
+				&limagrpc.Port{
+					IP:   entry.IP.String(),
+					Port: int32(entry.Port),
 				})
 		}
 	}
@@ -295,16 +295,16 @@ func (a *agent) LocalPorts(_ context.Context) ([]api.IPPort, error) {
 	return res, nil
 }
 
-func (a *agent) Info(ctx context.Context) (*api.Info, error) {
+func (a *agent) Info(ctx context.Context) (*limagrpc.InfoResponse, error) {
 	var (
-		info api.Info
+		info = &limagrpc.InfoResponse{}
 		err  error
 	)
 	info.LocalPorts, err = a.LocalPorts(ctx)
 	if err != nil {
 		return nil, err
 	}
-	return &info, nil
+	return info, nil
 }
 
 const deltaLimit = 2 * time.Second
@@ -335,10 +335,11 @@ func (a *agent) fixSystemTimeSkew() {
 	}
 }
 
-func (a *agent) HandleInotify(event api.InotifyEvent) {
+func (a *agent) HandleInotify(event *limagrpc.InotifyResponse) {
 	location := event.Location
 	if _, err := os.Stat(location); err == nil {
-		err := os.Chtimes(location, event.Time.Local(), event.Time.Local())
+		local := event.Time.AsTime().Local()
+		err := os.Chtimes(location, local, local)
 		if err != nil {
 			logrus.Errorf("error in inotify handle. Event: %s, Error: %s", event, err)
 		}

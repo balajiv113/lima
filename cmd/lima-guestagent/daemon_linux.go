@@ -3,13 +3,10 @@ package main
 import (
 	"errors"
 	"net"
-	"net/http"
 	"os"
 	"time"
 
-	"github.com/gorilla/mux"
 	"github.com/lima-vm/lima/pkg/guestagent"
-	"github.com/lima-vm/lima/pkg/guestagent/api/server"
 	"github.com/lima-vm/lima/pkg/guestagent/serialport"
 	"github.com/lima-vm/lima/pkg/store/filenames"
 	"github.com/mdlayher/vsock"
@@ -66,12 +63,6 @@ func daemonAction(cmd *cobra.Command, _ []string) error {
 	if err != nil {
 		return err
 	}
-	backend := &server.Backend{
-		Agent: agent,
-	}
-	r := mux.NewRouter()
-	server.AddRoutes(r, backend)
-	srv := &http.Server{Handler: r}
 
 	var l net.Listener
 	if _, err := os.Stat(virtioPort); err == nil {
@@ -89,5 +80,5 @@ func daemonAction(cmd *cobra.Command, _ []string) error {
 		l = vsockL
 		logrus.Infof("serving the guest agent on vsock port: %d", vSockPort)
 	}
-	return srv.Serve(l)
+	return guestagent.StartServer(l, &guestagent.GuestServer{Agent: agent})
 }
