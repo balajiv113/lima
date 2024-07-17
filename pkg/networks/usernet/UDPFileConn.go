@@ -3,6 +3,7 @@ package usernet
 import (
 	"errors"
 	"net"
+	"syscall"
 	"time"
 )
 
@@ -18,4 +19,12 @@ func (conn *UDPFileConn) Read(b []byte) (n int, err error) {
 		}
 	}
 	return conn.Conn.Read(b)
+}
+
+func (conn *UDPFileConn) Write(b []byte) (n int, err error) {
+	write, err := conn.Conn.Write(b)
+	if errors.Is(err, syscall.ENOBUFS) {
+		return conn.Write(b)
+	}
+	return write, err
 }
