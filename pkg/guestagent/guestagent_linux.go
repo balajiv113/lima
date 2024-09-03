@@ -5,10 +5,12 @@ import (
 	"errors"
 	"os"
 	"reflect"
+	"strconv"
 	"sync"
 	"syscall"
 	"time"
 
+	"github.com/balajiv113/trackport"
 	"github.com/elastic/go-libaudit/v2"
 	"github.com/elastic/go-libaudit/v2/auparse"
 	"github.com/lima-vm/lima/pkg/guestagent/api"
@@ -190,24 +192,27 @@ func isEventEmpty(ev *api.Event) bool {
 
 func (a *agent) Events(ctx context.Context, ch chan *api.Event) {
 	defer close(ch)
-	tickerCh, tickerClose := a.newTicker()
-	defer tickerClose()
-	var st eventState
-	for {
-		var ev *api.Event
-		ev, st = a.collectEvent(ctx, st)
-		if !isEventEmpty(ev) {
-			ch <- ev
+
+	callbackFn := func(event *trackport.PortEvent) {
+		logrus.Print(event)
+		port := make([]*api.IPPort, 1)
+		ev := &api.Event{Time: timestamppb.Now()}
+		atoi, _ := strconv.Atoi(event.Port)
+		protocol := trackport.ProtocolToString(event.Protocol)
+		if event.Action == trackport.OPEN {
+			port[0] = &api.IPPort{Ip: event.Ip.String(), Port: int32(atoi), Protocol: protocol}
+			ev.LocalPortsAdded = port
+		} else {
+			port[0] = &api.IPPort{Ip: event.Ip.String(), Port: int32(atoi), Protocol: protocol}
+			ev.LocalPortsRemoved = port
 		}
-		select {
-		case <-ctx.Done():
-			return
-		case _, ok := <-tickerCh:
-			if !ok {
-				return
-			}
-			logrus.Debug("tick!")
-		}
+		logrus.Debug("tick!")
+		ch <- ev
+	}
+	portMonitor := trackport.NewTracker(callbackFn, true)
+	err := portMonitor.Run(ctx)
+	if err != nil {
+		return
 	}
 }
 
