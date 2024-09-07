@@ -9,7 +9,6 @@ require (
 	github.com/Microsoft/go-winio v0.6.2
 	github.com/apparentlymart/go-cidr v1.1.0
 	github.com/balajiv113/fd v0.0.0-20230330094840-143eec500f3e
-	github.com/balajiv113/trackport v0.0.0-20240903083654-14a484a66cd2
 	github.com/cheggaaa/pb/v3 v3.1.5
 	github.com/containerd/containerd v1.7.21
 	github.com/containerd/continuity v0.4.3
@@ -59,6 +58,7 @@ require (
 	github.com/VividCortex/ewma v1.2.0 // indirect
 	github.com/a8m/envsubst v1.4.2 // indirect
 	github.com/alecthomas/participle/v2 v2.1.1 // indirect
+	github.com/balajiv113/trackport v0.0.0-20240911101501-da045f65161a // indirect
 	github.com/cilium/ebpf v0.16.0 // indirect
 	github.com/containerd/errdefs v0.1.0 // indirect
 	github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc // indirect

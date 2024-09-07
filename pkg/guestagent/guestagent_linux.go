@@ -3,6 +3,8 @@ package guestagent
 import (
 	"context"
 	"errors"
+	"github.com/balajiv113/trackport/pkg/audittracker"
+	"github.com/balajiv113/trackport/pkg/trackapi"
 	"os"
 	"reflect"
 	"strconv"
@@ -10,7 +12,6 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/balajiv113/trackport"
 	"github.com/elastic/go-libaudit/v2"
 	"github.com/elastic/go-libaudit/v2/auparse"
 	"github.com/lima-vm/lima/pkg/guestagent/api"
@@ -193,13 +194,13 @@ func isEventEmpty(ev *api.Event) bool {
 func (a *agent) Events(ctx context.Context, ch chan *api.Event) {
 	defer close(ch)
 
-	callbackFn := func(event *trackport.PortEvent) {
+	callbackFn := func(event *trackapi.PortEvent) {
 		logrus.Print(event)
 		port := make([]*api.IPPort, 1)
 		ev := &api.Event{Time: timestamppb.Now()}
 		atoi, _ := strconv.Atoi(event.Port)
-		protocol := trackport.ProtocolToString(event.Protocol)
-		if event.Action == trackport.OPEN {
+		protocol := trackapi.ProtocolToString(event.Protocol)
+		if event.Action == trackapi.OPEN {
 			port[0] = &api.IPPort{Ip: event.Ip.String(), Port: int32(atoi), Protocol: protocol}
 			ev.LocalPortsAdded = port
 		} else {
@@ -209,7 +210,8 @@ func (a *agent) Events(ctx context.Context, ch chan *api.Event) {
 		logrus.Debug("tick!")
 		ch <- ev
 	}
-	portMonitor := trackport.NewTracker(callbackFn, true)
+
+	portMonitor := audittracker.NewTracker(callbackFn)
 	err := portMonitor.Run(ctx)
 	if err != nil {
 		return
