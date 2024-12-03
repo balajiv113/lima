@@ -4,13 +4,12 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"io"
-	"net"
-
 	"github.com/lima-vm/lima/pkg/guestagent/api"
 	guestagentclient "github.com/lima-vm/lima/pkg/guestagent/api/client"
 	"github.com/sirupsen/logrus"
 	"golang.org/x/sync/errgroup"
+	"io"
+	"net"
 )
 
 func HandleTCPConnection(ctx context.Context, client *guestagentclient.GuestAgentClient, conn net.Conn, guestAddr string) {
@@ -27,6 +26,12 @@ func HandleTCPConnection(ctx context.Context, client *guestagentclient.GuestAgen
 	g, _ := errgroup.WithContext(ctx)
 
 	rw := &GrpcClientRW{stream: stream, id: id, addr: guestAddr}
+	//Ping message
+	_, err = rw.Write([]byte{})
+	if err != nil {
+		logrus.Debugf("error in pinging tcp tunnel for id: %s error:%v", id, err)
+	}
+
 	g.Go(func() error {
 		_, err := io.Copy(rw, conn)
 		if errors.Is(err, io.EOF) {
@@ -117,9 +122,6 @@ type GrpcClientRW struct {
 var _ io.ReadWriter = (*GrpcClientRW)(nil)
 
 func (g GrpcClientRW) Write(p []byte) (n int, err error) {
-	if len(p) == 0 {
-		return 0, nil
-	}
 	err = g.stream.Send(&api.TunnelMessage{
 		Id:        g.id,
 		GuestAddr: g.addr,
@@ -139,9 +141,6 @@ func (g GrpcClientRW) Read(p []byte) (n int, err error) {
 	}
 	if err != nil {
 		return 0, err
-	}
-	if len(in.Data) == 0 {
-		return 0, nil
 	}
 	copy(p, in.Data)
 	return len(in.Data), nil

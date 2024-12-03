@@ -1,11 +1,12 @@
 package portfwdserver
 
 import (
+	"bufio"
 	"errors"
+	"github.com/lima-vm/lima/pkg/guestagent/api"
+	"github.com/sirupsen/logrus"
 	"io"
 	"net"
-
-	"github.com/lima-vm/lima/pkg/guestagent/api"
 )
 
 type TunnelServer struct {
@@ -19,33 +20,45 @@ func NewTunnelServer() *TunnelServer {
 }
 
 func (s *TunnelServer) Start(stream api.GuestService_TunnelServer) error {
+	logrus.Println("start tunnel")
 	for {
 		in, err := stream.Recv()
 		if errors.Is(err, io.EOF) {
 			return nil
 		}
 		if err != nil {
+			logrus.Println("start tunnel err", err)
 			return err
 		}
-		if len(in.Data) == 0 {
-			continue
-		}
 
-		conn, ok := s.Conns[in.Id]
+		logrus.Println("start tunnel", in.Id, s.Conns)
+		_, ok := s.Conns[in.Id]
 		if !ok {
-			conn, err = net.Dial(in.Protocol, in.GuestAddr)
-			if err != nil {
-				return err
-			}
-			s.Conns[in.Id] = conn
+			//Retry on connect failure
+			for {
+				conn, err := net.Dial(in.Protocol, in.GuestAddr)
+				if err != nil {
+					return err
+				}
+				reader := bufio.NewReader(conn)
+				_, err = reader.Peek(1)
+				if err != nil {
+					if errors.Is(err, io.EOF) {
+						continue
+					}
+					return err
+				}
 
-			writer := &GRPCServerWriter{id: in.Id, udpAddr: in.UdpTargetAddr, stream: stream}
-			go func() {
-				_, _ = io.Copy(writer, conn)
-				delete(s.Conns, writer.id)
-			}()
+				s.Conns[in.Id] = conn
+				writer := &GRPCServerWriter{id: in.Id, udpAddr: in.UdpTargetAddr, stream: stream}
+				go func() {
+					_, _ = io.Copy(writer, reader)
+					delete(s.Conns, writer.id)
+				}()
+				break
+			}
 		}
-		_, err = conn.Write(in.Data)
+		_, err = s.Conns[in.Id].Write(in.Data)
 		if err != nil {
 			return err
 		}
@@ -61,9 +74,7 @@ type GRPCServerWriter struct {
 var _ io.Writer = (*GRPCServerWriter)(nil)
 
 func (g GRPCServerWriter) Write(p []byte) (n int, err error) {
-	if len(p) == 0 {
-		return 0, nil
-	}
 	err = g.stream.Send(&api.TunnelMessage{Id: g.id, Data: p, UdpTargetAddr: g.udpAddr})
+	logrus.Println("GRPC", len(p), err)
 	return len(p), err
 }

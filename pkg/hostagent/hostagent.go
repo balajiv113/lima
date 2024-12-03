@@ -656,7 +656,7 @@ func (a *HostAgent) processGuestAgentEvents(ctx context.Context, client *guestag
 		}
 		// useSSHFwd was false by default in v1.0, but reverted to true by default in v1.0.1
 		// due to stability issues
-		useSSHFwd := true
+		useSSHFwd := false
 		if envVar := os.Getenv("LIMA_SSH_PORT_FORWARDER"); envVar != "" {
 			b, err := strconv.ParseBool(os.Getenv("LIMA_SSH_PORT_FORWARDER"))
 			if err != nil {
@@ -665,6 +665,7 @@ func (a *HostAgent) processGuestAgentEvents(ctx context.Context, client *guestag
 				useSSHFwd = b
 			}
 		}
+		logrus.Println("GRPC Port forwarding", useSSHFwd)
 		if useSSHFwd {
 			a.portForwarder.OnEvent(ctx, ev)
 		} else {
